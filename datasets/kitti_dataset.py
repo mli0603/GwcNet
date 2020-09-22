@@ -4,26 +4,19 @@ from torch.utils.data import Dataset
 from PIL import Image
 import numpy as np
 from datasets.data_io import get_transform, read_all_lines
+from natsort import natsorted
 
 
 class KITTIDataset(Dataset):
-    def __init__(self, datapath, list_filename, training):
+    def __init__(self, datapath, training):
         self.datapath = datapath
-        self.left_filenames, self.right_filenames, self.disp_filenames = self.load_path(list_filename)
         self.training = training
-        if self.training:
-            assert self.disp_filenames is not None
 
-    def load_path(self, list_filename):
-        lines = read_all_lines(list_filename)
-        splits = [line.split() for line in lines]
-        left_images = [x[0] for x in splits]
-        right_images = [x[1] for x in splits]
-        if len(splits[0]) == 2:  # ground truth not available
-            return left_images, right_images, None
-        else:
-            disp_images = [x[2] for x in splits]
-            return left_images, right_images, disp_images
+        self.left_filenames = natsorted(
+            [os.path.join(datapath, 'image_2/', img) for img in os.listdir(os.path.join(datapath, 'image_2/')) if
+             img.find('_10') > -1])
+        self.right_filenames = [img.replace('image_2/', 'image_3/') for img in self.left_filenames]
+        self.disp_filenames = [img.replace('image_2/', 'disp_noc_0/') for img in self.left_filenames]
 
     def load_image(self, filename):
         return Image.open(filename).convert('RGB')

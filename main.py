@@ -64,6 +64,7 @@ model = __models__[args.model](args.maxdisp)
 model = nn.DataParallel(model)
 model.cuda()
 optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999))
+print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
 # load parameters
 start_epoch = 0
