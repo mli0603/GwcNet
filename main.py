@@ -27,8 +27,6 @@ parser.add_argument('--maxdisp', type=int, default=192, help='maximum disparity'
 
 parser.add_argument('--dataset', required=True, help='dataset name', choices=__datasets__.keys())
 parser.add_argument('--datapath', required=True, help='data path')
-parser.add_argument('--trainlist', required=True, help='training list')
-parser.add_argument('--testlist', required=True, help='testing list')
 
 parser.add_argument('--lr', type=float, default=0.001, help='base learning rate')
 parser.add_argument('--batch_size', type=int, default=16, help='training batch size')
@@ -56,8 +54,8 @@ logger = SummaryWriter(args.logdir)
 
 # dataset, dataloader
 StereoDataset = __datasets__[args.dataset]
-train_dataset = StereoDataset(args.datapath, args.trainlist, True)
-test_dataset = StereoDataset(args.datapath, args.testlist, False)
+train_dataset = StereoDataset(args.datapath, True)
+test_dataset = StereoDataset(args.datapath, False)
 TrainImgLoader = DataLoader(train_dataset, args.batch_size, shuffle=True, num_workers=8, drop_last=True)
 TestImgLoader = DataLoader(test_dataset, args.test_batch_size, shuffle=False, num_workers=4, drop_last=False)
 
@@ -90,44 +88,47 @@ print("start at epoch {}".format(start_epoch))
 
 def train():
     for epoch_idx in range(start_epoch, args.epochs):
-        adjust_learning_rate(optimizer, epoch_idx, args.lr, args.lrepochs)
-
-        # training
-        for batch_idx, sample in enumerate(TrainImgLoader):
-            global_step = len(TrainImgLoader) * epoch_idx + batch_idx
-            start_time = time.time()
-            do_summary = global_step % args.summary_freq == 0
-            loss, scalar_outputs, image_outputs = train_sample(sample, compute_metrics=do_summary)
-            if do_summary:
-                save_scalars(logger, 'train', scalar_outputs, global_step)
-                save_images(logger, 'train', image_outputs, global_step)
-            del scalar_outputs, image_outputs
-            print('Epoch {}/{}, Iter {}/{}, train loss = {:.3f}, time = {:.3f}'.format(epoch_idx, args.epochs,
-                                                                                       batch_idx,
-                                                                                       len(TrainImgLoader), loss,
-                                                                                       time.time() - start_time))
-        # saving checkpoints
-        if (epoch_idx + 1) % args.save_freq == 0:
-            checkpoint_data = {'epoch': epoch_idx, 'model': model.state_dict(), 'optimizer': optimizer.state_dict()}
-            torch.save(checkpoint_data, "{}/checkpoint_{:0>6}.ckpt".format(args.logdir, epoch_idx))
-        gc.collect()
+        # adjust_learning_rate(optimizer, epoch_idx, args.lr, args.lrepochs)
+        #
+        # # training
+        # for batch_idx, sample in enumerate(TrainImgLoader):
+        #     global_step = len(TrainImgLoader) * epoch_idx + batch_idx
+        #     start_time = time.time()
+        #     do_summary = global_step % args.summary_freq == 0
+        #     loss, scalar_outputs, image_outputs = train_sample(sample, compute_metrics=do_summary)
+        #     if do_summary:
+        #         save_scalars(logger, 'train', scalar_outputs, global_step)
+        #         save_images(logger, 'train', image_outputs, global_step)
+        #     del scalar_outputs, image_outputs
+        #     print('Epoch {}/{}, Iter {}/{}, train loss = {:.3f}, time = {:.3f}'.format(epoch_idx, args.epochs,
+        #                                                                                batch_idx,
+        #                                                                                len(TrainImgLoader), loss,
+        #                                                                                time.time() - start_time))
+        # # saving checkpoints
+        # if (epoch_idx + 1) % args.save_freq == 0:
+        #     checkpoint_data = {'epoch': epoch_idx, 'model': model.state_dict(), 'optimizer': optimizer.state_dict()}
+        #     torch.save(checkpoint_data, "{}/checkpoint_{:0>6}.ckpt".format(args.logdir, epoch_idx))
+        # gc.collect()
 
         # testing
         avg_test_scalars = AverageMeterDict()
         for batch_idx, sample in enumerate(TestImgLoader):
             global_step = len(TestImgLoader) * epoch_idx + batch_idx
             start_time = time.time()
-            do_summary = global_step % args.summary_freq == 0
+            do_summary = False  # global_step % args.summary_freq == 0
             loss, scalar_outputs, image_outputs = test_sample(sample, compute_metrics=do_summary)
-            if do_summary:
-                save_scalars(logger, 'test', scalar_outputs, global_step)
-                save_images(logger, 'test', image_outputs, global_step)
+
+            print('Batch: ', batch_idx, 'EPE: ', scalar_outputs['EPE'][0], 'Thres3: ', scalar_outputs['Thres3'][0])
+
+            # if do_summary:
+            #     save_scalars(logger, 'test', scalar_outputs, global_step)
+            #     save_images(logger, 'test', image_outputs, global_step)
             avg_test_scalars.update(scalar_outputs)
             del scalar_outputs, image_outputs
-            print('Epoch {}/{}, Iter {}/{}, test loss = {:.3f}, time = {:3f}'.format(epoch_idx, args.epochs,
-                                                                                     batch_idx,
-                                                                                     len(TestImgLoader), loss,
-                                                                                     time.time() - start_time))
+            # print('Epoch {}/{}, Iter {}/{}, test loss = {:.3f}, time = {:3f}'.format(epoch_idx, args.epochs,
+            #                                                                          batch_idx,
+            #                                                                          len(TestImgLoader), loss,
+            #                                                                          time.time() - start_time))
         avg_test_scalars = avg_test_scalars.mean()
         save_scalars(logger, 'fulltest', avg_test_scalars, len(TrainImgLoader) * (epoch_idx + 1))
         print("avg_test_scalars", avg_test_scalars)
@@ -176,7 +177,8 @@ def test_sample(sample, compute_metrics=True):
     disp_gt = disp_gt.cuda()
 
     disp_ests = model(imgL, imgR)
-    mask = (disp_gt < args.maxdisp) & (disp_gt > 0)
+    # mask = (disp_gt < args.maxdisp) & (disp_gt > 0)
+    mask = disp_gt > 0
     loss = model_loss(disp_ests, disp_gt, mask)
 
     scalar_outputs = {"loss": loss}
