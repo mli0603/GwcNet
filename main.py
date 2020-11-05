@@ -41,6 +41,7 @@ parser.add_argument('--seed', type=int, default=1, metavar='S', help='random see
 
 parser.add_argument('--summary_freq', type=int, default=20, help='the frequency of saving summary')
 parser.add_argument('--save_freq', type=int, default=1, help='the frequency of saving checkpoint')
+parser.add_argument('--within_max_disp', action='store_true')
 
 # parse arguments, set seeds
 args = parser.parse_args()
@@ -119,7 +120,8 @@ def train():
             do_summary = False  # global_step % args.summary_freq == 0
             loss, scalar_outputs, image_outputs = test_sample(sample, compute_metrics=do_summary)
 
-            print('Batch: ', batch_idx, 'EPE: ', scalar_outputs['EPE'][0], 'Thres3: ', scalar_outputs['Thres3'][0])
+            print('Batch: ', batch_idx, 'EPE: ', scalar_outputs['EPE'][0], 'Thres3: ',
+                  scalar_outputs['Thres3'][0] * 100)
 
             # if do_summary:
             #     save_scalars(logger, 'test', scalar_outputs, global_step)
@@ -178,8 +180,10 @@ def test_sample(sample, compute_metrics=True):
     disp_gt = disp_gt.cuda()
 
     disp_ests = model(imgL, imgR)
-    # mask = (disp_gt < args.maxdisp) & (disp_gt > 0)
-    mask = disp_gt > 0
+    if args.within_max_disp:
+        mask = torch.logical_and(disp_gt > 0.0, disp_gt < args.maxdisp)
+    else:
+        mask = disp_gt > 0.0
     loss = model_loss(disp_ests, disp_gt, mask)
 
     scalar_outputs = {"loss": loss}
